@@ -1,0 +1,140 @@
+源程序
+本实验采用matlab来实现，原程序如下所示：
+clear all;
+%1.读入图像并显示
+S=imread('E:\Sweden-coins.bmp');
+figure;imshow(S);title('原图像');
+ 
+%2.引入均值为零，方差为a的高斯噪声对图像进行平滑，然后进行拉普拉斯变换
+[m,n]=size(S);
+a=1;
+h=zeros(m,n);
+h=double(h);
+for i=1:m
+    for j=1:n
+        t=i^2+j^2;
+        h(i,j)=(t-2*a)*exp(-(t/(2*a)))/a^2;
+    end
+end
+H=fftshift(fft2(h));
+G=fftshift(fft2(S));
+W=H.*G;
+w=ifft2(ifftshift(W));
+figure;imshow(w);title('平滑后进行拉普拉斯变换后的图像');
+ %3.对水平，垂直，+45度，-45度方向进行边缘检测，采用Prewitt梯度算子
+IMG=double(w);
+H1=zeros(m,n);
+H2=zeros(m,n);
+G1=zeros(m,n);
+G2=zeros(m,n);
+for i=2:m-1
+    for j=2:n-1       H1(i,j)=-IMG(i-1,j-1)-IMG(i-1,j)-IMG(i-1,j+1)+IMG(i+1,j-1)+IMG(i+1,j)+IMG(i+1,j+1);        H2(i,j)=-IMG(i-1,j-1)-IMG(i,j-1)-IMG(i+1,j-1)+IMG(i-1,j+1)+IMG(i,j+1)+IMG(i+1,j+1);      G1(i,j)=IMG(i-1,j)+IMG(i-1,j+1)+IMG(i,j+1)-IMG(i,j-1)-IMG(i+1,j-1)-IMG(i+1,j);        G2(i,j)=-IMG(i-1,j-1)-IMG(i-1,j)-IMG(i,j-1)+IMG(i+1,j)+IMG(i,j+1)+IMG(i+1,j+1);
+    end
+end
+figure;imshow(H1);title('水平边缘');
+figure;imshow(H2);title('垂直边缘');
+figure;imshow(G1);title('-45度边缘');
+figure;imshow(G2);title('+45度边缘');
+Z=zeros(m,n);
+for i=1:m
+    for j=1:n
+       Z(i,j)=H1(i,j)+H2(i,j)+G1(i,j)+G2(i,j);
+    end
+end
+figure;imshow(Z);title('提取的边缘');
+%4.对提取的边缘进行二值化
+T=sum(Z(:))/(m*n);
+T2=20;
+while T2>0.5
+Y1=0;
+Y2=0;
+N1=0;
+N2=0;
+N1=double(N1);
+N2=double(N2);
+Y1=double(Y1);
+Y2=double(Y2);
+for i=1:m
+    for j=1:n
+        if(Z(i,j)>T)
+            Y1=Y1+double(Z(i,j));
+            N1=N1+1;
+        else
+            Y2=Y2+double(Z(i,j));
+            N2=N2+1;
+        end
+    end
+end
+t1=Y1/N1;
+t2=Y2/N2;
+T1=(t1+t2)/2;
+T2=abs(T-T1);
+T=T1
+end
+GS=zeros(m,n);
+for i=1:m
+    for j=1:n
+        if Z(i,j)>T
+            GS(i,j)=0;
+        else
+            GS(i,j)=255;
+        end
+    end
+end
+figure;imshow(GS);title('二值化后的图像'); 
+%5.进行hough变换,检测圆形边界
+BW=double(GS);
+r_max=100;
+r_min=10;step_r=1;step_angle=pi/18;p=0.7;
+size_r = round((r_max-r_min)/step_r)+1;
+size_angle = round(2*pi/step_angle);
+hough_space = zeros(m,n,size_r);
+[rows,cols] = find(BW);
+ecount = size(rows);
+for i=1:ecount
+    for r=1:size_r
+        for k=1:size_angle
+            a = round(rows(i)-(r_min+(r-1)*step_r)*cos(k*step_angle));
+            b = round(cols(i)-(r_min+(r-1)*step_r)*sin(k*step_angle));
+            if(a>0&&a<=m&&b>0&&b<=n)
+                hough_space(a,b,r) = hough_space(a,b,r)+1;
+            end
+        end
+    end
+end
+max_para = max(max(max(hough_space)));
+index = find(hough_space>=max_para*p);
+length = size(index);
+hough_circle = false(m,n);
+for i=1:ecount
+    for k=1:length
+        par3 = floor(index(k)/(m*n))+1;
+        par2 = floor((index(k)-(par3-1)*(m*n))/m)+1;
+        par1 = index(k)-(par3-1)*(m*n)-(par2-1)*m;
+        if((rows(i)-par1)^2+(cols(i)-par2)^2<(r_min+(par3-1)*step_r)^2+5&&...
+                (rows(i)-par1)^2+(cols(i)-par2)^2>(r_min+(par3-1)*step_r)^2-5)
+            hough_circle(rows(i),cols(i)) = true;
+        end
+    end
+end
+for k=1:length
+    par3 = floor(index(k)/(m*n))+1;
+    par2 = floor((index(k)-(par3-1)*(m*n))/m)+1;
+    par1 = index(k)-(par3-1)*(m*n)-(par2-1)*m;
+    par3 = r_min+(par3-1)*step_r;
+    fprintf(1,'Center %d %d radius %d\n',par1,par2,par3);
+    para(:,k) = [par1,par2,par3];
+end
+figure;imshow(hough_circle);title('hough变化后的图像'); 
+%6.将hough变化后提取的图像与原图像相加，增强其边缘
+LST=zeros(m,n);
+for i=1:m
+    for j=1:n
+            if hough_circle(i,j)==1;
+                LST(i,j)=255;
+            else
+                LST(i,j)=S(i,j);
+            end
+    end
+end
+figure;imshow(LST,[]);title('最终的结果');
